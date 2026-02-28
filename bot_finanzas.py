@@ -66,8 +66,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 if __name__ == "__main__":
-    TOKEN = os.environ.get("8592148719:AAEtO8LsyYoGnQQdg67K5HZKeUeYDOfddc8
-")
+    TOKEN = os.environ.get("8592148719:AAEtO8LsyYoGnQQdg67K5HZKeUeYDOfddc8")
     if not TOKEN:
         print("Error: TOKEN no encontrado en variables de entorno")
         exit(1)
