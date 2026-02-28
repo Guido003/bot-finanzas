@@ -1,86 +1,80 @@
-import logging
+import os
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-# -----------------------------
-# CONFIGURACIÓN
-# -----------------------------
-TOKEN = "8592148719:AAEtO8LsyYoGnQQdg67K5HZKeUeYDOfddc8"
-user_data = {}  # Guardamos datos de cada usuario por chat_id
+# Diccionario para guardar datos de cada usuario
+user_data = {}
 
-# -----------------------------
-# LOGGING
-# -----------------------------
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-
-# -----------------------------
-# FUNCIONES
-# -----------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Hola! Soy tu bot de finanzas.\n"
-        "Comandos disponibles:\n"
-        "- sueldo <monto>\n"
-        "- gasto <categoria> <monto>\n"
-        "- saldo\n"
-        "- resumen"
-    )
+    await update.message.reply_text("Hola! Soy tu bot de finanzas.\n"
+                                    "Podés registrar tu sueldo, gastos y pedir tu saldo o resumen.\n"
+                                    "Ejemplo:\n"
+                                    "sueldo 50000\n"
+                                    "gasto comida 200\n"
+                                    "gasto transporte 50\n"
+                                    "saldo\n"
+                                    "resumen")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat_id
-    text = update.message.text.lower().strip()
+    from_number = update.message.from_user.id
+    text = update.message.text.lower()
 
-    if chat_id not in user_data:
-        user_data[chat_id] = {"sueldo": 0, "gastos": {}}
+    # Crear usuario si no existe
+    if from_number not in user_data:
+        user_data[from_number] = {
+            "sueldo": 0,
+            "gastos": []
+        }
 
-    user = user_data[chat_id]
+    user = user_data[from_number]
+    lines = text.split("\n")
+    responses = []
 
-    try:
-        if text.startswith("sueldo"):
-            monto = float(text.split()[1])
-            user["sueldo"] = monto
-            await update.message.reply_text(f"Sueldo mensual registrado: ${monto:.2f}")
+    for line in lines:
+        parts = line.split()
+        if not parts:
+            continue
 
-        elif text.startswith("gasto"):
-            _, categoria, monto = text.split()
-            monto = float(monto)
-            if categoria not in user["gastos"]:
-                user["gastos"][categoria] = 0
-            user["gastos"][categoria] += monto
-            await update.message.reply_text(f"Gasto registrado: {categoria} ${monto:.2f}")
+        if parts[0] == "sueldo" and len(parts) == 2:
+            user["sueldo"] = float(parts[1])
+            responses.append(f"Sueldo registrado: {user['sueldo']}")
 
-        elif text == "saldo":
-            total_gastos = sum(user["gastos"].values())
+        elif parts[0] == "gasto" and len(parts) == 3:
+            categoria = parts[1]
+            monto = float(parts[2])
+            user["gastos"].append((categoria, monto))
+            responses.append(f"Gasto agregado: {categoria} - {monto}")
+
+        elif parts[0] == "saldo":
+            total_gastos = sum(g[1] for g in user["gastos"])
             saldo = user["sueldo"] - total_gastos
-            await update.message.reply_text(f"Saldo disponible: ${saldo:.2f}")
+            responses.append(f"Saldo disponible: {saldo}")
 
-        elif text == "resumen":
-            if user["gastos"]:
-                resumen = "\n".join([f"{cat}: ${monto:.2f}" for cat, monto in user["gastos"].items()])
-                total_gastos = sum(user["gastos"].values())
-                saldo = user["sueldo"] - total_gastos
-                await update.message.reply_text(f"Resumen de gastos:\n{resumen}\nTotal gastado: ${total_gastos:.2f}\nSaldo: ${saldo:.2f}")
-            else:
-                await update.message.reply_text("No hay gastos registrados.")
+        elif parts[0] == "resumen":
+            total_gastos = sum(g[1] for g in user["gastos"])
+            saldo = user["sueldo"] - total_gastos
+            resumen = f"Sueldo: {user['sueldo']}\nGastos:"
+            for g in user["gastos"]:
+                resumen += f"\n  {g[0]}: {g[1]}"
+            resumen += f"\nSaldo: {saldo}"
+            responses.append(resumen)
 
         else:
-            await update.message.reply_text(
-                "Comando no reconocido.\n"
-                "Usa:\n- sueldo <monto>\n- gasto <categoria> <monto>\n- saldo\n- resumen"
-            )
-    except Exception as e:
-        await update.message.reply_text("Hubo un error al procesar tu mensaje. Verifica el formato.")
+            responses.append(f"No entiendo: {line}")
 
-# -----------------------------
-# INICIAR BOT
-# -----------------------------
-def main():
+    await update.message.reply_text("\n\n".join(responses))
+
+
+if __name__ == "__main__":
+    TOKEN = os.environ.get("TOKEN")
+    if not TOKEN:
+        print("Error: TOKEN no encontrado en variables de entorno")
+        exit(1)
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    print("Bot corriendo...")
     app.run_polling()
-
-if __name__ == "__main__":
-    main()
